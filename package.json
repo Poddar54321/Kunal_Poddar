@@ -1,0 +1,15 @@
+{
+  "name": "backend_kunal_poddar",
+  "version": "1.0.0",
+  "description": "a backend project based on node",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "javascript",
+    "backend"
+  ],
+  "author": "kunal poddar",
+  "license": "ISC"
+}

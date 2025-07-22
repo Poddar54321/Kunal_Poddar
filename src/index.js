@@ -1,13 +1,12 @@
 // require('dotenv').config({path: './env'})
 import dotenv from "dotenv";
-// import { app } from "./app.js";
+import { app } from "./app.js";
 import connectDB from "./db/index.js";
 
 dotenv
   .config
   // { path: "./env",}   // adding path is not important because dotenv.config() , automatically by defalut .env file ko fetch kar leta , but the condition is that the file should only be named as ".env" in the folder not by any other name in the folder.
   ();
-
 
 connectDB()
   .then(() => {

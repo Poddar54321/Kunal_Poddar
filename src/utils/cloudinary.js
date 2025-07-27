@@ -16,6 +16,7 @@ const uploadOnCloudinary = async (localFilePath) => {
     });
     // now file has been uploaded succesfully
     console.log("file is uploaded successfully on cloudinary", response.url);
+    // fs.unlinkSync(localFilePath);
     return response;
   } catch (error) {
     // agar file succeesfully upload nahi huyi ha then we need to catch the error

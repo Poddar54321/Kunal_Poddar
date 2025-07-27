@@ -5,12 +5,12 @@ import connectDB from "./db/index.js";
 
 dotenv
   .config
-  // { path: "./env",}   // adding path is not important because dotenv.config() , automatically by defalut .env file ko fetch kar leta , but the condition is that the file should only be named as ".env" in the folder not by any other name in the folder.
+  // { path: "./.env",}   // adding path is not important because dotenv.config() , automatically by defalut .env file ko fetch kar leta , but the condition is that the file should only be named as ".env" in the folder not by any other name in the folder.
   ();
 
-connectDB()
+connectDB()  // is wale method m jo connection hamne niche extablish kara hai , vaise hi same connection ham ne db/index.js nam ki separate file m kar liya ha or usko upar import kar k yaha par connectDB kar liye hai.
   .then(() => {
-    app.listen(process.env.PORT || 8000, () => {
+    app.listen(process.env.PORT || 8000, () => { // after the DB is connected we will listen to the URL.
       console.log(`server is runnign on port : ${process.env.PORT}`);
     });
   })

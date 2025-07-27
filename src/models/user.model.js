@@ -57,7 +57,7 @@ userSchema.pre("save", async function (next) {
   // kyuki yeh hamara middleware hai isliye hamne "next" ka use kiya hai , and as this is a time taking process , we have used async
   if (this.isModified("password")) {
     // agar ham is condition nahi lagayenge then hamara password data k har ek change me  resave ho jayega and uska ek new hash bana dega
-    this.password = bcrypt.hash(this.password, 10);
+    this.password = await bcrypt.hash(this.password, 10); // hash generation is a time taking process so isme await lagana jaruri hai.
     next();
   }
 

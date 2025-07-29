@@ -4,6 +4,32 @@ import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/user.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponce.js";
+
+const generateAccessAndRefreshToken = async (userId) => {
+  // yah par hame asyncHandler ki jarurat kyuki yah par ham koyi web Request wagarah handle nahi kar rahe hai , here we are only using our internal methods.
+  //  to create the tokens we need to pass the userId.
+  //  now how will we get the userId ? ->  we can easily access the userId from the user variable in this code
+  try {
+    // 1. sabse pahle to hame user find karna padega if we want to create token for user.
+    const user = await User.findOne(userId); // we will use the finOne emthod from the mongoose to fetch the user using userId & addditionally we can again notice a thing that yaha par hamne "User" ka se kar kyuki here we are using the finOne method from mongoose.
+    //  2. As we got the user , we will create the tokens
+    const refreshToken = user.generateRefreshToken(); // yaha par hamne "user" use kara hai kyuki yaha we are our self define functions that we ahve created from our side.
+    const accessToken = user.generateAccessToken();
+    // -> now we have both acces token & refresh token with us
+    // ->ACCESS TOKEN to ham  user ko de dete hai but REFRESH TOKEN ko ham hamare Database m bhi save kar k rakhte hai so that hame bar bar user se password na puchhna pade.
+    //  Now we have question that Refresh Token ko Database m kaise dal? -> now we can see that in the "user" object we have received all properties including "refreshToken" (user.model m jakar check karo ki user object m kya kya aaya hai)
+    user.refreshToken = refreshToken; // yaha par user.refreshToken k andar refreshToken ki value bhej di hai
+    // now hamne user k andara refreshToken to bhej diya but abhi user save bhi karwana padega.
+    await user.save({ validateBeforeSave: false }); // by default agar ham direct user.save() likh denge to mongoose baki sare required field ko bhi mangega that;s why hamne yaha par "validation: false" bhej diya hai.
+    return { accessToken, refreshToken }; // after everything is done then we will return accessToken ad refreshToken.
+  } catch {
+    throw new ApiError( // as the problem is from our side , so we will use 500 error code
+      500,
+      "Something went wrong while generating refresh and access token"
+    );
+  }
+};
+
 const registerUser = asyncHandler(async (req, res) => {
   // res.status(200).json({ // yaha par success code ko 200 set kara hai
   //   message: "hello people , this is kunal",
@@ -84,4 +110,99 @@ const registerUser = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, createduser, "User registered successfully"));
 });
 
-export { registerUser };
+//  now access token and refresh token we will create the login :-
+const loginUser = asyncHandler(async (req, res) => {
+  // STEP 1:- WHAT ARE THE STEPS INCLUDED IN LOGINUSER API :-
+  // STEP 2:- req body -> data (req body se data le kar aa jao)
+  // STEP 3:- username or email
+  // STEP 4:- find the user
+  // STEP 5:- password check
+  // STEP 6:- generate access & refresh token , and both will sent to the user ("user.model.js" file m access token and refesh token dono hi generate ho gya hai )
+  // STEP 7:- send these token to cookies & sent a response of successfully login
+
+  //  Step 1 :- req body -> data (req body se data le kar aa jao)
+  const { email, username, password } = req.body;
+  // username or email -> we are adding condition for username and email:-
+
+  if (!username && !email) {
+    throw new ApiError(400, "username or email is required");
+  }
+  const user = await User.findOne({
+    // we use "User" not "user" because this "findOne" method is from monggose , we can use "user" when  we are using user defined methods like isPasswordCorrect
+    //  "User" is the obejct of mongoose & "user" is that instance od "User" that we received from the database
+    $or: [{ username }, { email }], // yaha par hamne or wuth dollar use kara ha so that , we can find the user on the basis of username or email.
+  });
+  if (!user) {
+    throw new ApiError(404, "user not found");
+  }
+  //  ab agar hamra user exist karta hoga to , we are required cheeck the password , we need to veruify that the password is correct or not.
+  //  we can go to user.model.js and check that we have a method name isPasswod correct , we just need to send password typed by user as argument to this function.
+  const isPasswordValid = await user.isPasswordCorrect(password); // here we are passing the user types password as argument.
+  if (!isPasswordValid) {
+    throw new ApiError(401, "Invalid user credentials");
+  }
+
+  //  agar user ka password thik hai to ham access and refresh token banayenge
+  //  we have already created a separate funtion to generate access token adn refresh token
+  const { accessToken, refreshToken } = await generateAccessAndRefreshToken(
+    user._id
+  );
+  // we will pass user id as argument in e generateAccessAndRefreshToken function
+
+  const loggedInUser = await User.findById(user._id).select(
+    "-password -refreshToken"
+  ); // we already have a user instance of "User" but we are recrecreating a instance kyuki "user" instance m hamare pass sari fields aa gayi thi including those we don't requre , so here we have filtered all unneccessary fields using .select method.
+  // STEP 7:- now we need to send cookies
+  const options = {
+    // jab ham cookies bhejte ha to hame kuchh options design karne padte hai
+    httpOnly: true,
+    secure: true, // by default cookie can be easily defined from frontend , but jab ye dono chize tru kar dete to cookie ko sirf server side se hi modify kara ja sakta hai., after this it can't be modified from frontend. , we can only view it from frontend.
+  };
+  //  now we have to return a response from this method:-
+  return res
+    .status(200)
+    .cookie("accesstoken", accessToken, options)
+    .cookie("refreshToken", refreshToken)
+    .json(
+      new ApiResponse(
+        200, // mtch this with ApiResponse in utils , this is our "statusCode"
+        {
+          user: loggedInUser,
+          accessToken,
+          refreshToken,
+        }, // this is our "data"
+        "User logged in successfully" // and this is our "message"
+      )
+    );
+});
+const logoutOutUser = asyncHandler(async (req, res) => {
+  // STEPS INVOLVED IN LOGGING OUT A USER FROM THE APPLICATION:-
+  //  1. clear all the cookies.
+  //  2. reset ACCESS TOKEN & REFRESH TOKEN
+  User.findByIdAndUpdate(
+    req.user._id,
+    {
+      $set: {
+        refreshToken: undefined,
+      },
+    },
+    {
+      new: true,
+    }
+  );
+  const options = {
+    httpOnly: true,
+    secure: true,
+  };
+  return res
+    .status(200)
+    .clearCookie("accessToken", options)
+    .clearCookie("refreshToken", options)
+    .json(new ApiResponse(200, {}, "User logged Out Successfully"));
+});
+export {
+  registerUser,
+  loginUser,
+  generateAccessAndRefreshToken,
+  logoutOutUser,
+};

@@ -11,7 +11,7 @@ const generateAccessAndRefreshToken = async (userId) => {
   //  now how will we get the userId ? ->  we can easily access the userId from the user variable in this code
   try {
     // 1. sabse pahle to hame user find karna padega if we want to create token for user.
-    const user = await User.findOne(userId); // we will use the finOne emthod from the mongoose to fetch the user using userId & addditionally we can again notice a thing that yaha par hamne "User" ka se kar kyuki here we are using the finOne method from mongoose.
+    const user = await User.findById(userId); // we will use the finOne emthod from the mongoose to fetch the user using userId & addditionally we can again notice a thing that yaha par hamne "User" ka se kar kyuki here we are using the finOne method from mongoose.
     //  2. As we got the user , we will create the tokens
     const refreshToken = user.generateRefreshToken(); // yaha par hamne "user" use kara hai kyuki yaha we are our self define functions that we ahve created from our side.
     const accessToken = user.generateAccessToken();
@@ -161,8 +161,8 @@ const loginUser = asyncHandler(async (req, res) => {
   //  now we have to return a response from this method:-
   return res
     .status(200)
-    .cookie("accesstoken", accessToken, options)
-    .cookie("refreshToken", refreshToken)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
     .json(
       new ApiResponse(
         200, // mtch this with ApiResponse in utils , this is our "statusCode"
@@ -179,17 +179,20 @@ const logoutOutUser = asyncHandler(async (req, res) => {
   // STEPS INVOLVED IN LOGGING OUT A USER FROM THE APPLICATION:-
   //  1. clear all the cookies.
   //  2. reset ACCESS TOKEN & REFRESH TOKEN
-  User.findByIdAndUpdate(
+  console.log("logout function");
+  await User.findByIdAndUpdate(
     req.user._id,
     {
       $set: {
         refreshToken: undefined,
       },
     },
+
     {
       new: true,
     }
   );
+
   const options = {
     httpOnly: true,
     secure: true,

@@ -2,9 +2,14 @@ import { application, response } from "express";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/user.model.js";
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import {
+  deleteFromCloudinary,
+  uploadOnCloudinary,
+} from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponce.js";
 import jwt from "jsonwebtoken";
+import { AsyncLocalStorage } from "async_hooks";
+import { use } from "react";
 
 const generateAccessAndRefreshToken = async (userId) => {
   // yah par hame asyncHandler ki jarurat kyuki yah par ham koyi web Request wagarah handle nahi kar rahe hai , here we are only using our internal methods.
@@ -247,10 +252,118 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
   }
 });
 
+const changeCurrentPassword = asyncHandler(async (req, res) => {
+  const { oldPassword, newPassword } = req.body; // here we also take condirmPassword
+
+  const user = await User.findById(req.user?._id);
+  const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
+  if (!isPasswordCorrect) {
+    throw new ApiError(400, "Invalid old password");
+  }
+
+  user.password = newPassword; // this line will trigger "userSchema.pre" hook in "user.model.js"
+  await user.save({ validateBeforeSave: false }); // here we are saving the passwrod "userSchema.pre" will only get trigger when we save the password , upar hamne sirf object m set kara ha save nhi kara tha
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, {}, "Password Changed successfully"));
+});
+
+const getCurrentUser = asyncHandler(async (req, res) => {
+  return res
+    .status(200)
+    .json(new ApiResponse(200, req.user, "current user fetchwed successfuly"));
+});
+
+const updateAccountDetails = asyncHandler(async (req, res) => {
+  const { fullname, email } = req.body;
+
+  if (!fullname || email) {
+    throw new ApiError(400, "all fields are required");
+  }
+
+  const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+      $set: {
+        fullname,
+        email: email, // dono hi method sahi ha chahe upar wala tarika use karo -> direct jaise "fullname" likeh ha hamne or chahe ye wala tarika "email : email"
+      },
+    },
+    { new: true } // new : true lar par hame new updated details milti hai
+  ).select(-"password");
+  return res
+    .status(200)
+    .json(new ApiResponse(200, user, "Account details updated successfully"));
+});
+
+const updateUserAvatar = asyncHandler(async (req, res) => {
+  const avatarLocalPath = req.file?.path; // sirf ek file leni ha isliye "file" likha ha , agar multiple file leni hoti to "files" likhte.
+
+  if (!avatarLocalPath) {
+    throw new ApiError(400, "Avatar file is missing");
+  }
+
+  //  Deleting the old avatar :-
+  const currentUser = await User.findById(req.user?._id);
+  if (!currentUser) {
+    throw new ApiError("user not found");
+  }
+
+  if (currentUser.avatar) {
+    await deleteFromCloudinary(currentUser.avatar);
+  }
+  // updating the new avatar :-
+  const avatar = await uploadOnCloudinary(avatarLocalPath);
+
+  if (!avatar || !avatar.url) {
+    throw new ApiError(400, "Error while uploading on avatar");
+  }
+  const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+      $set: {
+        avatar: avatar.url,
+      },
+    },
+    { new: true }
+  ).select("-password");
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, user, "avatar updated successfully"));
+});
+
+const updateUserCoverImage = asyncHandler(async (req, res) => {
+  const coverImageLocalPath = req.file?.path;
+  if (!coverImageLocalPath) {
+    throw new ApiError(400, "Cover Image file is missing");
+  }
+  const coverImage = await uploadOnCloudinary(coverImageLocalPath); // yaha par we will get the coverImage object from cloudinary
+
+  if (!coverImage || !coverImage.url) {
+    throw new ApiError(400, "Error while uploading the image ");
+  }
+
+  const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    { $set: { coverImage: coverImage.url } },
+    { new: true }
+  ).select("-password");
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, user, "Cover Image updated successfully"));
+});
 export {
   registerUser,
   loginUser,
   generateAccessAndRefreshToken,
   logoutOutUser,
   refreshAccessToken,
+  changeCurrentPassword,
+  getCurrentUser,
+  updateAccountDetails,
+  updateUserAvatar,
+  updateUserCoverImage,
 };
